@@ -4,6 +4,34 @@ import numpy as np
 from nn import NeuralNetwork
 from config import CONFIG
 
+def normalize(x):
+    x[0, 0] /= CONFIG['WIDTH']
+    x[1, 0] /= CONFIG['WIDTH']
+    x[2, 0] /= CONFIG['HEIGHT']
+    x[3, 0] /= CONFIG['HEIGHT']
+    x[4, 0] /= 10
+    x[5, 0] /= 10
+
+def create_input_vector(agent_position, box_lists, velocity):
+    try:
+        distance_box0 = box_lists[0].x - agent_position[0]
+        box0_gap = box_lists[0].gap_mid - agent_position[1]
+        try:
+            distance_box1 = box_lists[1].x - agent_position[0]
+            box1_gap = box_lists[1].gap_mid - agent_position[1]
+        except IndexError:
+            distance_box1 = CONFIG['WIDTH']
+            box1_gap = CONFIG['HEIGHT'] / 2
+    except IndexError:
+        distance_box0 = CONFIG['WIDTH']
+        distance_box1 = CONFIG['WIDTH']
+        box0_gap = CONFIG['HEIGHT'] / 2
+        box1_gap = CONFIG['HEIGHT'] / 2
+
+    x = np.array(([distance_box0], [distance_box1], [box0_gap], [box1_gap], [velocity], [velocity]))
+
+    normalize(x)
+    return x
 
 class Player():
 
@@ -83,6 +111,7 @@ class Player():
 
                 if mode == 'gravity' and event.key == pygame.K_SPACE:
                     self.direction *= -1
+        print("😂")
 
     def init_network(self, mode):
 
@@ -105,8 +134,22 @@ class Player():
         # box_lists: an array of `BoxList` objects
         # agent_position example: [600, 250]
         # velocity example: 7
+        x = create_input_vector(agent_position, box_lists, velocity)
+        result = self.nn.forward(x)
 
-        direction = -1
+        if mode == 'helicopter' or mode == 'gravity':
+            if result > 0.5:
+                direction = 1
+            else:
+                direction = -1
+        else:
+            if result > 0.66:
+                direction = 1
+            elif result < 0.33:
+                direction = -1
+            else:
+                direction = 0
+
         return direction
 
     def collision_detection(self, mode, box_lists, camera):

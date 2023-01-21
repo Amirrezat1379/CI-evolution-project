@@ -15,22 +15,46 @@ class Evolution():
         for i, p in enumerate(players):
             p.fitness = delta_xs[i]
 
+    def add_gaussian_noise(self, array, threshold):
+        random_number = np.random.uniform(0, 1, 1)
+        if random_number < threshold:
+            array += np.random.normal(size=array.shape)
+
     def mutate(self, child):
         # TODO
         # child: an object of class `Player`
-        mutation_threshold = 0.7
-        center = 0
-        margin = 0.3
+        threshold = 0.2
 
-        for i in range(len(child.nn.w)):
-            if np.random.random_sample() >= mutation_threshold :
-                child.nn.w[i] += np.random.normal(center, margin, size=(child.nn.w[i].shape))
-        
-        for i in range(len(child.nn.b)):
-            if np.random.random_sample() >= mutation_threshold:
-                child.nn.b[i] += np.random.normal(center, margin, size=(child.nn.b[i].shape))
+        self.add_gaussian_noise(child.nn.W1, threshold)
+        self.add_gaussian_noise(child.nn.W2, threshold)
+        self.add_gaussian_noise(child.nn.b1, threshold)
+        self.add_gaussian_noise(child.nn.b2, threshold)
 
+    def crossover(self, child1_array, child2_array, parent1_array, parent2_array):
+        row_size, column_size = child1_array.shape
+        section_1, section_2, section_3 = int(row_size / 3), int(2 * row_size / 3), row_size
 
+        random_number = np.random.uniform(0, 1, 1)
+        if random_number > 0.5:
+            child1_array[:section_1, :] = parent1_array[:section_1:, :]
+            child1_array[section_1:section_2, :] = parent2_array[section_1:section_2, :]
+            child1_array[section_2:, :] = parent1_array[section_2:, :]
+
+            child2_array[:section_1, :] = parent2_array[:section_1:, :]
+            child2_array[section_1:section_2, :] = parent1_array[section_1:section_2, :]
+            child2_array[section_2:, :] = parent2_array[section_2:, :]
+        else:
+            child1_array[:section_1, :] = parent2_array[:section_1:, :]
+            child1_array[section_1:section_2, :] = parent1_array[section_1:section_2, :]
+            child1_array[section_2:, :] = parent2_array[section_2:, :]
+
+            child2_array[:section_1, :] = parent1_array[:section_1:, :]
+            child2_array[section_1:section_2, :] = parent2_array[section_1:section_2, :]
+            child2_array[section_2:, :] = parent1_array[section_2:, :]
+
+    # def q_tournament(self, players, q):
+    #     q_selected = np.random.choice(players, q)
+    #     return max(q_selected, key=lambda player: player.fitness)
 
     def generate_new_population(self, num_players, prev_players=None):
 
@@ -46,67 +70,38 @@ class Evolution():
 
             # TODO (additional): a selection method other than `fitness proportionate`
             # TODO (additional): implementing crossover
-            new_players = []
-            parents = prev_players
+            children = []
+            parents = []
+            for _ in range(num_players):
+                parents.append(self.q_tournament(prev_players, q=3))
 
-            for i in range(num_players) : 
-                parent1 = random.choice(parents)
-                parent2 = random.choice(parents)
-                W1 = np.zeros((parent1.nn.layer2, parent1.nn.layer1))
-                W2 = np.zeros((parent1.nn.layer3, parent1.nn.layer2))
-                b1 = np.zeros((parent1.nn.layer2, 1))
-                b2 = np.zeros((parent1.nn.layer3, 1))
+            for i in range(0, len(parents), 2):
+                child1 = Player(self.mode)
+                child2 = Player(self.mode)
 
-                # cross over for W1
-                for j in range(len(parent1.nn.W1)):
-                    if j % 2 == 0 :
-                        W1[j] = parent1.nn.W1[j]
-                    else : 
-                        W1[j] = parent2.nn.W1[j]
-                
-                # cross over for W2
-                for j in range(len(parent1.nn.W2)):
-                    if j % 2 == 0 :
-                        W2[j] = parent1.nn.W2[j]
-                    else : 
-                        W2[j] = parent2.nn.W2[j]
+                self.crossover(child1.nn.W1, child2.nn.W1, parents[i].nn.W1, parents[i + 1].nn.W1)
+                self.crossover(child1.nn.W2, child2.nn.W2, parents[i].nn.W2, parents[i + 1].nn.W2)
+                self.crossover(child1.nn.b1, child2.nn.b1, parents[i].nn.b1, parents[i + 1].nn.b1)
+                self.crossover(child1.nn.b2, child2.nn.b2, parents[i].nn.b2, parents[i + 1].nn.b2)
 
-                # cross over for b1
-                for j in range(len(parent1.nn.b1)):
-                    if j % 2 == 0 :
-                        b1[j] = parent1.nn.b1[j]
-                    else : 
-                        b1[j] = parent2.nn.b1[j]
+                self.mutate(child1)
+                self.mutate(child2)
+                children.append(child1)
+                children.append(child2)
+            return children
 
-                # cross over for b2
-                for j in range(len(parent1.nn.b2)):
-                    if j % 2 == 0 :
-                        b2[j] = parent1.nn.b2[j]
-                    else : 
-                        b2[j] = parent2.nn.b2[j]
-                child = self.clone_player(parent1)
-
-                W1 = self.mutation(W1)
-                W2 = self.mutation(W2)
-                b1 = self.mutation(b1)
-                b2 = self.mutation(b2)
-                new_players.append(child)
-            return new_players
     def clone_player(self, player):
         """
         Gets a player as an input and produces a clone of that player.
         """
-        new_player = Player(self.game_mode)
+        new_player = Player(self.mode)
         new_player.nn = copy.deepcopy(player.nn)
         new_player.fitness = player.fitness
         return new_player
     
-    def q_tournament(self ,players ,num_players ,q ):
-        selected = []
-        for i in range(num_players) :
-             q_selections = np.random.choice(players, q)
-             selected.append(max(q_selections, key=attrgetter('fitness')))
-        return selected
+    def q_tournament(self, players, q):
+        q_selected = np.random.choice(players, q)
+        return max(q_selected, key=lambda player: player.fitness)
 
     def roulette_wheel(self , players , num_player):
         fitness_sum = sum([player.fitness for player in players])
@@ -184,6 +179,6 @@ class Evolution():
         # players: an array of `Player` objects
         # TODO (additional): a selection method other than `top-k`
         # TODO (additional): plotting
-        players = self.q_tournament(players, num_players, 4)
+        players = self.roulette_wheel(players, num_players)
         self.save_fitness(players)
         return players[: num_players]
